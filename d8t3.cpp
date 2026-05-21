@@ -3,13 +3,13 @@
  * 对森林A将v在A中删去并将v周围的联通块标记为1其余为0
  * 对另一森林B同理，将两个森林的联通块进行匹配，至多有一个(1,1)（在u,v不相邻时），不可能有(0,0)，0一定匹配1
  * 用map维护A的联通块的哈希值，用B的标记为1的与A标为0的匹配，B中标记为0的与A中标为1的匹配
- *
+ * 最后对一棵树重新编号，枚举一下hash链接两棵树
  */
 #include <bits/stdc++.h>
 using namespace std;
 using hash_t = unsigned long long;
 
-const int N = 2010;
+const int N = 6;
 int n, m1, m2;
 vector<int> g[2][N];
 int siz[2][N];
@@ -92,9 +92,8 @@ private:
     }
 };
 
-map<hash_t, Subtree*> tr[2][N][2];
+set<pair<hash_t, Subtree*>> tr[2][N][2];
 vector<pair<int, int>> ans;
-
 
 int main() {
     cin >> n;
@@ -113,42 +112,51 @@ int main() {
     for (int i = 1; i <= n; i++) {
         memset(vis, 0, sizeof(vis));
         for (int v : g[0][i]) {
-            tr[0][i][0].insert(Subtree(i, 0, v).toPair());
+            tr[0][i][1].insert((new Subtree(i, 0, v))->toPair());
         }
         for (int v : g[1][i]) {
-            tr[1][i][0].insert(Subtree(i, 1, v).toPair());
+            tr[1][i][1].insert((new Subtree(i, 1, v))->toPair());
         }
         for (int v = 1; v <= n; v++) {
             if (i == v) continue;
             if (!vis[0][v]) {
-                tr[0][i][1].insert(Subtree(i, 0, v).toPair());
+                tr[0][i][0].insert((new Subtree(i, 0, v))->toPair());
             }
             if (!vis[1][v]) {
-                tr[1][i][1].insert(Subtree(i, 1, v).toPair());
+                tr[1][i][0].insert((new Subtree(i, 1, v))->toPair());
             }
         }
     }
     for (int u = 1; u <= n; u++) {
         for (int v = 1; v <= n; v++) {
             if (tr[0][u][0].size() == tr[1][v][1].size() && tr[0][u][1].size() == tr[1][v][0].size()
-                || tr[0][u][0].size() == tr[1][v][1].size() - 1 && tr[1][v][0].size() == tr[0][v][1].size() - 1) {
+                || tr[0][u][0].size() == tr[1][v][1].size() - 1 && tr[1][v][0].size() == tr[0][u][1].size() - 1) {
                 bool flag = true;
 
+                vector <pair<set<pair<hash_t, Subtree*>>*, pair<hash_t, Subtree*>>> del;
+
+                auto match = [&](set<pair<hash_t, Subtree*>>& s, pair<hash_t, Subtree*> a) -> Subtree* {
+                    auto it = s.lower_bound({ a.first, nullptr });
+                    if (it == s.end() || it->first != a.first) return nullptr;
+                    s.erase(it);
+                    del.emplace_back(&s, a);
+                    return it->second;
+                };
+
                 for (auto& a : tr[0][u][0]) {
-                    if (tr[1][v][1].count(a.first)) {
+                    if (!match(tr[1][v][1], a)) {
                         flag = false;
                         break;
                     }
                 }
 
-                Subtree* p, * q;
-                p = q = nullptr;
+                Subtree* p = nullptr, * q = nullptr;
                 for (auto& a : tr[0][u][1]) {
-                    if (tr[1][v][0].count(a.first)) {
+                    if (!match(tr[1][v][0], a)) {
                         if (!p && !q) {
-                            if (tr[1][v][1].count(a.first)) {
+                            q = match(tr[1][v][1], a);
+                            if (q) {
                                 p = a.second;
-                                q = tr[1][v][1][a.first];
                                 continue;
                             }
                         }
@@ -157,7 +165,12 @@ int main() {
                     }
                 }
 
-                if (!flag) continue;
+                if (!flag) {
+                    for (auto it : del) {
+                        it.first->insert(it.second);
+                    }
+                    continue;
+                }
 
                 vector<int> indexMap(n + 1, -1);
 
@@ -179,11 +192,6 @@ int main() {
 
                 vector<bool> enable(n + 1, 1);
 
-                for (auto& t : tr[1][v][0]) {
-                    for (int node : t.second->nodes) {
-                        enable[node] = 0;
-                    }
-                }
                 for (auto& t : tr[1][v][1]) {
                     for (int node : t.second->nodes) {
                         enable[node] = 0;
